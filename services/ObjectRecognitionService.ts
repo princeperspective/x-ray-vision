@@ -183,83 +183,59 @@ const mapPredictionToObject = (predictions: Array<{ className: string; probabili
     };
 };
 
+// REPLACE THIS WITH YOUR COMPUTER'S LOCAL IP ADDRESS (e.g., 192.168.1.X)
+// 'localhost' will NOT work on your phone!
+const API_URL = 'http://192.168.1.100:8000/predict'; // <--- CHANGE THIS
+
 export const identifyObject = async (imageUri: string): Promise<ObjectData | null> => {
     console.log('==========================================');
-    console.log('🚀 Starting object identification');
-    console.log('📷 Image URI:', imageUri.length > 100 ? imageUri.substring(0, 100) + '...' : imageUri);
-    console.log('📱 Platform:', Platform.OS);
+    console.log('🚀 Starting object identification via Python Backend');
+    console.log('📷 Image URI:', imageUri.length > 50 ? imageUri.substring(0, 50) + '...' : imageUri);
+    console.log('🌐 Target API:', API_URL);
     console.log('==========================================');
 
     try {
-        // Load the model first
-        console.log('📥 Step 1: Loading model...');
-        const loadedModel = await loadModel();
+        // 1. Prepare Form Data
+        console.log('📤 Step 1: Preparing upload...');
+        const formData = new FormData();
         
-        if (!loadedModel) {
-            console.error('❌ Model failed to load');
-            return null;
+        // We need to fetch the file info to get the type correctly on native, 
+        // but often we can just infer it or let the backend handle it.
+        // For Expo, we can construct the file object directly:
+        const filename = imageUri.split('/').pop() || 'photo.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+        formData.append('file', {
+            uri: imageUri,
+            name: filename,
+            type: type,
+        } as any);
+
+        // 2. Send Request
+        console.log('📡 Step 2: Sending request to Python server...');
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'content-type': 'multipart/form-data',
+            },
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Server responded with ${response.status}: ${errorText}`);
         }
 
-        console.log('🖼️ Step 2: Processing image...');
-        let predictions: Array<{ className: string; probability: number }>;
+        // 3. Parse Response
+        const data = await response.json();
+        const predictions = data.predictions;
 
-        if (Platform.OS === 'web') {
-            // WEB IMPLEMENTATION
-            console.log('🌐 Web Environment Detected');
-            predictions = await new Promise((resolve, reject) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                
-                img.onload = async () => {
-                    try {
-                        console.log('✅ Image loaded successfully');
-                        console.log('🧠 Step 3: Running MobileNet inference...');
-                        const preds = await loadedModel!.classify(img);
-                        resolve(preds);
-                    } catch (error) {
-                        reject(error);
-                    }
-                };
-                
-                img.onerror = (error) => reject(new Error('Failed to load image'));
-                img.src = imageUri;
-            });
-        } else {
-            // NATIVE IMPLEMENTATION (iOS/Android)
-            console.log('📱 Native Environment Detected');
-
-            // 0. Resize image to prevent OOM
-            console.log('📐 Resizing image for model input...');
-            const manipResult = await ImageManipulator.manipulateAsync(
-                imageUri,
-                [{ resize: { width: 512 } }], // MobileNet uses 224x224, 512 is plenty safe
-                { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
-            );
-            
-            // 1. Read file as Base64
-            const imgB64 = await FileSystem.readAsStringAsync(manipResult.uri, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
-            
-            // 2. Convert Base64 to Uint8Array
-            const imgBuffer = tf.util.encodeString(imgB64, 'base64').buffer;
-            const raw = new Uint8Array(imgBuffer);
-            
-            // 3. Decode JPEG to Tensor directly
-            const imageTensor = decodeJpeg(raw);
-            
-            console.log('🧠 Step 3: Running MobileNet inference...');
-            predictions = await loadedModel.classify(imageTensor);
-            
-            // Cleanup tensor to prevent memory leaks
-            imageTensor.dispose();
-        }
-        
         console.log('✅ Classification complete!');
         console.log(`📊 Received ${predictions.length} predictions`);
         
-        // Map predictions to our object database
-        console.log('🔄 Step 4: Mapping predictions to database...');
+        // 4. Map predictions to our object database
+        console.log('🔄 Step 3: Mapping predictions to database...');
         const result = mapPredictionToObject(predictions);
         
         if (result) {
@@ -276,11 +252,12 @@ export const identifyObject = async (imageUri: string): Promise<ObjectData | nul
 
     } catch (error) {
         console.log('==========================================');
-        console.error('❌ ERROR during object identification:');
+        console.error('❌ ERROR connecting to Python Backend:');
         console.error('Message:', error instanceof Error ? error.message : String(error));
-        if (error instanceof Error && error.stack) {
-            console.error('Stack trace:', error.stack);
-        }
+        console.error('------- TIPS -------');
+        console.error('1. Make sure the Python server is running');
+        console.error('2. Make sure your computer and phone are on the same WiFi');
+        console.error('3. UPDATE THE "API_URL" at the top of ObjectRecognitionService.ts with your computer IP');
         console.log('==========================================');
         return null;
     }
