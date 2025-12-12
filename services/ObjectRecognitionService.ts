@@ -1,3 +1,4 @@
+import * as mobilenet from '@tensorflow-models/mobilenet';
 import { ObjectData } from '../types';
 
 const MOCK_DB: Record<string, ObjectData> = {
@@ -79,95 +80,210 @@ const MOCK_DB: Record<string, ObjectData> = {
     },
 };
 
-// Google Cloud Vision API configuration
-const VISION_API_KEY = 'AIzaSyB-AjPbXT-YvnULXoaFX141ktB5d27q6tI'; // Replace with actual key
-const VISION_API_ENDPOINT = 'https://vision.googleapis.com/v1/images:annotate';
+// TensorFlow model state
+let model: mobilenet.MobileNet | null = null;
+let isModelLoading = false;
 
-interface VisionLabel {
-    description: string;
-    score: number;
-}
-
-const mapLabelToObject = (labels: VisionLabel[]): ObjectData | null => {
-    console.log('Vision API Labels:', labels);
-
-    for (const label of labels) {
-        const desc = label.description.toLowerCase();
-
-        // High confidence matches
-        if (desc.includes('computer mouse') || desc.includes('mouse')) return MOCK_DB['mouse'];
-        if (desc.includes('cellular telephone') || desc.includes('mobile phone') || desc.includes('smartphone')) return MOCK_DB['phone'];
-        if (desc.includes('light bulb') || desc.includes('lamp') || desc.includes('incandescent')) return MOCK_DB['lightbulb'];
-        if (desc.includes('computer keyboard') || desc.includes('keyboard')) return MOCK_DB['keyboard'];
-        if (desc.includes('water bottle') || desc.includes('bottle')) return MOCK_DB['bottle'];
-        if (desc.includes('coffee cup') || desc.includes('mug') || desc.includes('cup')) return MOCK_DB['cup'];
-        if (desc.includes('laptop') || desc.includes('notebook computer')) return MOCK_DB['laptop'];
-        if (desc.includes('watch') || desc.includes('wristwatch')) return MOCK_DB['watch'];
+// Initialize TensorFlow and load MobileNet model
+const loadModel = async () => {
+    if (model) return model;
+    if (isModelLoading) {
+        // Wait for ongoing load
+        while (isModelLoading) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        return model;
     }
 
+    try {
+        isModelLoading = true;
+        console.log('🔄 Loading MobileNet model...');
+
+        // Load the MobileNet model
+        model = await mobilenet.load({
+            version: 2,
+            alpha: 1.0,
+        });
+
+        console.log('✅ MobileNet model loaded successfully!');
+        return model;
+    } catch (error) {
+        console.error('❌ Failed to load model:', error);
+        throw error;
+    } finally {
+        isModelLoading = false;
+    }
+};
+
+// Map MobileNet predictions to our internal database
+const mapPredictionToObject = (predictions: Array<{ className: string; probability: number }>): ObjectData | null => {
+    console.log('📊 MobileNet Predictions:', JSON.stringify(predictions.slice(0, 5), null, 2));
+
+    // Get the top prediction
+    if (!predictions || predictions.length === 0) {
+        console.log('⚠️ No predictions returned');
+        return null;
+    }
+
+    // Check all predictions with reasonable confidence
+    for (const prediction of predictions) {
+        const className = prediction.className.toLowerCase();
+        const confidence = prediction.probability;
+
+        console.log(`🔍 Checking: "${className}" (${(confidence * 100).toFixed(1)}%)`);
+
+        // Only consider predictions with >3% confidence
+        if (confidence < 0.03) {
+            console.log(`  ⏭️ Skipped (confidence too low)`);
+            continue;
+        }
+
+        // Map to our internal database (more comprehensive mapping)
+        // Mouse
+        if (className.includes('mouse')) {
+            console.log('✅ MATCHED: Mouse');
+            return MOCK_DB['mouse'];
+        }
+
+        // Phone/Smartphone
+        if (className.includes('cellular') ||
+            className.includes('phone') ||
+            className.includes('smartphone') ||
+            className.includes('iphone') ||
+            className.includes('ipod')) {
+            console.log('✅ MATCHED: Phone');
+            return MOCK_DB['phone'];
+        }
+
+        // Light bulb
+        if (className.includes('light') ||
+            className.includes('bulb') ||
+            className.includes('lamp') ||
+            className.includes('lantern') ||
+            className.includes('torch')) {
+            console.log('✅ MATCHED: Lightbulb');
+            return MOCK_DB['lightbulb'];
+        }
+
+        // Keyboard
+        if (className.includes('keyboard') ||
+            className.includes('typewriter')) {
+            console.log('✅ MATCHED: Keyboard');
+            return MOCK_DB['keyboard'];
+        }
+
+        // Bottle
+        if (className.includes('bottle') ||
+            className.includes('flask')) {
+            console.log('✅ MATCHED: Bottle');
+            return MOCK_DB['bottle'];
+        }
+
+        // Cup/Mug
+        if (className.includes('cup') ||
+            className.includes('mug') ||
+            className.includes('coffee') ||
+            className.includes('espresso')) {
+            console.log('✅ MATCHED: Cup');
+            return MOCK_DB['cup'];
+        }
+
+        // Laptop
+        if (className.includes('laptop') ||
+            className.includes('notebook')) {
+            console.log('✅ MATCHED: Laptop');
+            return MOCK_DB['laptop'];
+        }
+
+        // Watch
+        if (className.includes('watch') ||
+            className.includes('clock')) {
+            console.log('✅ MATCHED: Watch');
+            return MOCK_DB['watch'];
+        }
+    }
+
+    console.log('❌ No matching object found in database');
+    console.log('🔝 Top 3 predictions were:');
+    predictions.slice(0, 3).forEach((p, i) => {
+        console.log(`   ${i + 1}. ${p.className} (${(p.probability * 100).toFixed(1)}%)`);
+    });
     return null;
 };
 
 export const identifyObject = async (imageUri: string): Promise<ObjectData | null> => {
-    console.log('Starting object identification for:', imageUri);
+    console.log('==========================================');
+    console.log('🚀 Starting object identification');
+    console.log('📷 Image URI:', imageUri.length > 100 ? imageUri.substring(0, 100) + '...' : imageUri);
+    console.log('==========================================');
 
     try {
-        // Try Google Cloud Vision API first
-        if (VISION_API_KEY && VISION_API_KEY !== 'YOUR_API_KEY_HERE') {
-            try {
-                const response = await fetch(imageUri);
-                const blob = await response.blob();
-                const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64data = (reader.result as string).split(',')[1];
-                        resolve(base64data);
-                    };
-                    reader.readAsDataURL(blob);
-                });
+        // Load the model first
+        console.log('📥 Step 1: Loading model...');
+        const loadedModel = await loadModel();
 
-                const visionResponse = await fetch(`${VISION_API_ENDPOINT}?key=${VISION_API_KEY}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        requests: [
-                            {
-                                image: { content: base64 },
-                                features: [{ type: 'LABEL_DETECTION', maxResults: 10 }],
-                            },
-                        ],
-                    }),
-                });
-
-                const data = await visionResponse.json();
-                console.log('Vision API Response:', data);
-
-                if (data.responses && data.responses[0].labelAnnotations) {
-                    const labels = data.responses[0].labelAnnotations;
-                    const result = mapLabelToObject(labels);
-                    if (result) return result;
-                }
-            } catch (visionError) {
-                console.log('Vision API failed, using fallback:', visionError);
-            }
+        if (!loadedModel) {
+            console.error('❌ Model failed to load');
+            return null;
         }
 
-        // Fallback: Enhanced mock system with simple heuristics
-        console.log('Using fallback mock system');
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        console.log('🖼️ Step 2: Creating image element...');
 
-        // Simple heuristic: Use a rotating system that cycles through objects
-        const keys = Object.keys(MOCK_DB);
-        const timestamp = Date.now();
-        const index = Math.floor((timestamp / 5000) % keys.length); // Changes every 5 seconds
+        // For web/Expo, we can use Image API
+        const predictions = await new Promise<Array<{ className: string; probability: number }>>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
 
-        console.log(`Fallback selected: ${keys[index]}`);
-        return MOCK_DB[keys[index]];
+            img.onload = async () => {
+                try {
+                    console.log('✅ Image loaded successfully');
+                    console.log('📐 Image dimensions:', img.width, 'x', img.height);
+                    console.log('🧠 Step 3: Running MobileNet inference...');
+
+                    const preds = await loadedModel!.classify(img);
+                    resolve(preds);
+                } catch (error) {
+                    console.error('❌ Error during classification:', error);
+                    reject(error);
+                }
+            };
+
+            img.onerror = (error) => {
+                console.error('❌ Failed to load image:', error);
+                reject(new Error('Failed to load image'));
+            };
+
+            console.log('⏳ Loading image from URI...');
+            img.src = imageUri;
+        });
+
+        console.log('✅ Classification complete!');
+        console.log(`📊 Received ${predictions.length} predictions`);
+
+        // Map predictions to our object database
+        console.log('🔄 Step 4: Mapping predictions to database...');
+        const result = mapPredictionToObject(predictions);
+
+        if (result) {
+            console.log('==========================================');
+            console.log(`🎉 SUCCESS! Object identified: ${result.name}`);
+            console.log('==========================================');
+            return result;
+        }
+
+        console.log('==========================================');
+        console.log('⚠️ Could not map predictions to known objects');
+        console.log('==========================================');
+        return null;
 
     } catch (error) {
-        console.error('Error identifying object:', error);
+        console.log('==========================================');
+        console.error('❌ ERROR during object identification:');
+        console.error('Message:', error instanceof Error ? error.message : String(error));
+        if (error instanceof Error && error.stack) {
+            console.error('Stack trace:', error.stack);
+        }
+        console.log('==========================================');
         return null;
     }
 };
