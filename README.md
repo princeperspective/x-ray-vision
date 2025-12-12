@@ -1,50 +1,118 @@
-# Welcome to your Expo app 👋
+# X-Ray Vision: Object Decomposition App 🔍📱
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+An advanced React Native application that combines computer vision with interactive AR-like visualization to reveal the internal components of everyday objects. This project leverages **TensorFlow.js** directly on the device to perform real-time object recognition and maps the results to a structured internal component database.
 
-## Get started
+![Status](https://img.shields.io/badge/Status-Active-success)
+![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Web-blue)
+![Framework](https://img.shields.io/badge/Framework-Expo%20%7C%20React%20Native-blueviolet)
 
-1. Install dependencies
+## 🚀 Key Features
 
-   ```bash
-   npm install
-   ```
+- **Real-Time Object Detection**: Uses a quantized MobileNet model running locally on the device to identify objects with low latency.
+- **X-Ray Visualization**: Overlays hypothetical internal components (e.g., CPU, Battery, Filament) onto recognized objects.
+- **Interactive UI**: Users can tap on individual components to learn about their function and specifications.
+- **Cross-Platform**: Fully functional on iOS, Android, and Web using Expo's unified API.
+- **Privacy-First**: All image processing happens locally or via client-side scripts; user images are processed in memory and not permanently stored.
 
-2. Start the app
+## 🛠 Technology Stack
 
-   ```bash
-   npx expo start
-   ```
+### Core Framework
 
-In the output, you'll find options to open the app in a
+- **React Native**: Building native interfaces using React.
+- **Expo SDK 50+**: Managed workflow for rapid development and device hardware access.
+- **TypeScript**: Strongly typed codebase for robustness and maintainability.
+- **Expo Router**: File-system based routing for seamless screen navigation.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Artificial Intelligence
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- **TensorFlow.js (`@tensorflow/tfjs`)**: Machine learning backend for JavaScript.
+- **MobileNet (`@tensorflow-models/mobilenet`)**: Lightweight, pre-trained Convolutional Neural Network (CNN) optimized for mobile devices.
+- **Expo GL**: Hardware-accelerated graphics context used by TensorFlow for tensor computations.
 
-## Get a fresh project
+### Device Integration
 
-When you're ready, run:
+- **Expo Camera**: For capturing images relative to the device viewport.
+- **Expo FileSystem**: For handling image data streams and base64 encoding.
 
-```bash
-npm run reset-project
+## 🏗 Architecture Overview
+
+The application follows a Service-Oriented Architecture (SOA) coupled with React's component-based UI.
+
+```
+proj1/
+├── app/                    # Expo Router screens (Navigation)
+│   ├── index.tsx           # Home/Landing screen
+│   ├── scan.tsx            # Camera capture interface
+│   └── result.tsx          # Recognition results & visualization
+├── components/             # Reusable UI elements
+│   └── OverlayView.tsx     # AR-style component overlay system
+├── services/               # Core business logic & AI modules
+│   └── ObjectRecognitionService.ts  # TFJS implementation & Object DB
+├── types.ts                # TypeScript interface definitions
+└── assets/                 # Static assets
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Deep Dive: Object Recognition Pipeline
 
-## Learn more
+1.  **Image Capture**: The user captures an image via `Expo Camera` in `scan.tsx`. The image is saved temporarily to the device cache.
+2.  **Tensor Conversion**: The `ObjectRecognitionService` reads the image URI and processes it.
+    - _Web/Hybrid_: Uses standard HTML `Image` API to load pixel data.
+    - _Native_: Uses `GLView` or `decodeJpeg` (adapter dependent) to convert raw bytes into a Rank-3 Tensor (`[height, width, 3]`).
+3.  **Inference**:
+    - The tensor is fed into the **MobileNet** model.
+    - The model outputs a probability distribution over 1,000+ ImageNet classes.
+4.  **Semantic Mapping**:
+    - The service filters predictions using a confidence threshold (default: >3%).
+    - Predictions are mapped to the internal `MOCK_DB`. For example, a prediction of "cellular telephone" maps to the internal `phone` schema containing component data (SoC, Battery, Camera Module).
+5.  **Visualization**: The `OverlayView` component processes the mapped data and renders interactive "hotspots" or component lists over the image.
 
-To learn more about developing your project with Expo, look at the following resources:
+## 💻 Installation & Setup
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Prerequisites
 
-## Join the community
+- Node.js (LTS v18+ recommended)
+- npm or yarn
+- Expo Go app installed on your physical device (iOS/Android)
 
-Join our community of developers creating universal apps.
+### Steps
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1.  **Clone the Repository**
+
+    ```bash
+    git clone <repository-url>
+    cd proj1
+    ```
+
+2.  **Install Dependencies**
+    Note: We use `--legacy-peer-deps` due to version mismatches between some TFJS native adapters and the latest React Native/Expo versions.
+
+    ```bash
+    npm install --legacy-peer-deps
+    ```
+
+3.  **Start the Development Server**
+
+    ```bash
+    npm start
+    ```
+
+4.  **Run on Device**
+    - Scan the QR code displayed in the terminal using the Expo Go app.
+    - Press `w` to run in a web browser.
+    - Press `a` for Android Emulator or `i` for iOS Simulator (requires setup).
+
+## 🔧 Troubleshooting
+
+- **`ERESOLVE` Dependency Errors**: Always run `npm install --legacy-peer-deps`. TensorFlow React Native adapters often lag slightly behind the fast-moving Expo release cycle.
+- **"Model failed to load"**: Ensure you have an active internet connection. The MobileNet model weights are fetched from the Google Cloud Storage CDN on the first run.
+- **Camera Black Screen**: Check app permissions in your device settings. The app requires Camera access to function.
+
+## 🔮 Future Roadmap
+
+- **Custom Model Training**: Replace MobileNet with a custom-trained TFLite model fine-tuned on X-ray specific datasets or exploded views.
+- **Real AR Tracking**: Implement SLAM (Simultaneous Localization and Mapping) to anchor component overlays to physical space rather than static images.
+- **Community Database**: Allow users to contribute "teardown" schemas for new objects.
+
+---
+
+_Built with ❤️ using React Native & TensorFlow_
