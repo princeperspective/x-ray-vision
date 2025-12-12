@@ -28,7 +28,10 @@ export default function ScanScreen() {
         if (cameraRef.current && !takingPicture) {
             setTakingPicture(true);
             try {
-                const photo = await cameraRef.current.takePictureAsync();
+                const photo = await cameraRef.current.takePictureAsync({
+                    quality: 0.5,
+                    skipProcessing: true, // Only if you don't need correct orientation processed by Expo, but usually safer to be false. Let's try just quality first.
+                });
                 if (photo) {
                     router.push({
                         pathname: '/result',

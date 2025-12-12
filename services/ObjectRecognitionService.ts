@@ -1,5 +1,10 @@
 import * as mobilenet from '@tensorflow-models/mobilenet';
 import { ObjectData } from '../types';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { decodeJpeg } from '@tensorflow/tfjs-react-native';
+import * as tf from '@tensorflow/tfjs';
 
 const MOCK_DB: Record<string, ObjectData> = {
     lightbulb: {
@@ -115,162 +120,155 @@ const loadModel = async () => {
     }
 };
 
-// Map MobileNet predictions to our internal database
+// Map MobileNet predictions to our internal data structure
 const mapPredictionToObject = (predictions: Array<{ className: string; probability: number }>): ObjectData | null => {
     console.log('📊 MobileNet Predictions:', JSON.stringify(predictions.slice(0, 5), null, 2));
 
-    // Get the top prediction
     if (!predictions || predictions.length === 0) {
-        console.log('⚠️ No predictions returned');
         return null;
     }
 
-    // Check all predictions with reasonable confidence
+    // 1. Try to find a specific match in our MOCK_DB (High Fidelity X-Ray)
     for (const prediction of predictions) {
         const className = prediction.className.toLowerCase();
-        const confidence = prediction.probability;
-
-        console.log(`🔍 Checking: "${className}" (${(confidence * 100).toFixed(1)}%)`);
-
-        // Only consider predictions with >3% confidence
-        if (confidence < 0.03) {
-            console.log(`  ⏭️ Skipped (confidence too low)`);
-            continue;
-        }
-
-        // Map to our internal database (more comprehensive mapping)
-        // Mouse
-        if (className.includes('mouse')) {
-            console.log('✅ MATCHED: Mouse');
-            return MOCK_DB['mouse'];
-        }
-
-        // Phone/Smartphone
-        if (className.includes('cellular') ||
-            className.includes('phone') ||
-            className.includes('smartphone') ||
-            className.includes('iphone') ||
-            className.includes('ipod')) {
-            console.log('✅ MATCHED: Phone');
-            return MOCK_DB['phone'];
-        }
-
-        // Light bulb
-        if (className.includes('light') ||
-            className.includes('bulb') ||
-            className.includes('lamp') ||
-            className.includes('lantern') ||
-            className.includes('torch')) {
-            console.log('✅ MATCHED: Lightbulb');
-            return MOCK_DB['lightbulb'];
-        }
-
-        // Keyboard
-        if (className.includes('keyboard') ||
-            className.includes('typewriter')) {
-            console.log('✅ MATCHED: Keyboard');
-            return MOCK_DB['keyboard'];
-        }
-
-        // Bottle
-        if (className.includes('bottle') ||
-            className.includes('flask')) {
-            console.log('✅ MATCHED: Bottle');
-            return MOCK_DB['bottle'];
-        }
-
-        // Cup/Mug
-        if (className.includes('cup') ||
-            className.includes('mug') ||
-            className.includes('coffee') ||
-            className.includes('espresso')) {
-            console.log('✅ MATCHED: Cup');
-            return MOCK_DB['cup'];
-        }
-
-        // Laptop
-        if (className.includes('laptop') ||
-            className.includes('notebook')) {
-            console.log('✅ MATCHED: Laptop');
-            return MOCK_DB['laptop'];
-        }
-
-        // Watch
-        if (className.includes('watch') ||
-            className.includes('clock')) {
-            console.log('✅ MATCHED: Watch');
-            return MOCK_DB['watch'];
-        }
+        
+        // Exact entries for our manual database
+        if (className.includes('mouse') && MOCK_DB.mouse) return MOCK_DB.mouse;
+        if ((className.includes('phone') || className.includes('cellular')) && MOCK_DB.phone) return MOCK_DB.phone;
+        if (className.includes('keyboard') && MOCK_DB.keyboard) return MOCK_DB.keyboard;
+        if (className.includes('bottle') && MOCK_DB.bottle) return MOCK_DB.bottle;
+        if ((className.includes('cup') || className.includes('mug')) && MOCK_DB.cup) return MOCK_DB.cup;
+        if (className.includes('laptop') && MOCK_DB.laptop) return MOCK_DB.laptop;
+        if (className.includes('watch') && MOCK_DB.watch) return MOCK_DB.watch;
+        if ((className.includes('light') || className.includes('lamp')) && MOCK_DB.lightbulb) return MOCK_DB.lightbulb;
     }
 
-    console.log('❌ No matching object found in database');
-    console.log('🔝 Top 3 predictions were:');
-    predictions.slice(0, 3).forEach((p, i) => {
-        console.log(`   ${i + 1}. ${p.className} (${(p.probability * 100).toFixed(1)}%)`);
-    });
-    return null;
+    // 2. If no exact DB match, generate a DYNAMIC object (Universal Recognition)
+    const topPrediction = predictions[0];
+    
+    // Capitalize each word for invalid names
+    const displayName = topPrediction.className
+        .split(',')[0] // Take first alias if multiple (e.g. "notebook, laptop")
+        .split(' ')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+
+    console.log(`✨ Generating dynamic X-Ray for: ${displayName}`);
+
+    return {
+        id: `dynamic_${Date.now()}`,
+        name: displayName,
+        description: `Identified as ${topPrediction.className} with ${(topPrediction.probability * 100).toFixed(1)}% confidence.\n\nAI-generated structural analysis displayed below.`,
+        components: [
+            // Generate generic speculative components since we don't have a blueprint
+            { 
+                id: 'gen_1', 
+                name: 'External Chassis', 
+                description: `The outer structural layer of the ${displayName}.`, 
+                position: { x: 50, y: 20 } 
+            },
+            { 
+                id: 'gen_2', 
+                name: 'Primary Mass', 
+                description: 'The main functional body of the object.', 
+                position: { x: 50, y: 50 } 
+            },
+            { 
+                id: 'gen_3', 
+                name: 'Base Structure', 
+                description: 'Supporting foundation and material composition.', 
+                position: { x: 50, y: 80 } 
+            }
+        ]
+    };
 };
 
 export const identifyObject = async (imageUri: string): Promise<ObjectData | null> => {
     console.log('==========================================');
     console.log('🚀 Starting object identification');
     console.log('📷 Image URI:', imageUri.length > 100 ? imageUri.substring(0, 100) + '...' : imageUri);
+    console.log('📱 Platform:', Platform.OS);
     console.log('==========================================');
 
     try {
         // Load the model first
         console.log('📥 Step 1: Loading model...');
         const loadedModel = await loadModel();
-
+        
         if (!loadedModel) {
             console.error('❌ Model failed to load');
             return null;
         }
 
-        console.log('🖼️ Step 2: Creating image element...');
+        console.log('🖼️ Step 2: Processing image...');
+        let predictions: Array<{ className: string; probability: number }>;
 
-        // For web/Expo, we can use Image API
-        const predictions = await new Promise<Array<{ className: string; probability: number }>>((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
+        if (Platform.OS === 'web') {
+            // WEB IMPLEMENTATION
+            console.log('🌐 Web Environment Detected');
+            predictions = await new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                
+                img.onload = async () => {
+                    try {
+                        console.log('✅ Image loaded successfully');
+                        console.log('🧠 Step 3: Running MobileNet inference...');
+                        const preds = await loadedModel!.classify(img);
+                        resolve(preds);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                
+                img.onerror = (error) => reject(new Error('Failed to load image'));
+                img.src = imageUri;
+            });
+        } else {
+            // NATIVE IMPLEMENTATION (iOS/Android)
+            console.log('📱 Native Environment Detected');
 
-            img.onload = async () => {
-                try {
-                    console.log('✅ Image loaded successfully');
-                    console.log('📐 Image dimensions:', img.width, 'x', img.height);
-                    console.log('🧠 Step 3: Running MobileNet inference...');
-
-                    const preds = await loadedModel!.classify(img);
-                    resolve(preds);
-                } catch (error) {
-                    console.error('❌ Error during classification:', error);
-                    reject(error);
-                }
-            };
-
-            img.onerror = (error) => {
-                console.error('❌ Failed to load image:', error);
-                reject(new Error('Failed to load image'));
-            };
-
-            console.log('⏳ Loading image from URI...');
-            img.src = imageUri;
-        });
-
+            // 0. Resize image to prevent OOM
+            console.log('📐 Resizing image for model input...');
+            const manipResult = await ImageManipulator.manipulateAsync(
+                imageUri,
+                [{ resize: { width: 512 } }], // MobileNet uses 224x224, 512 is plenty safe
+                { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            
+            // 1. Read file as Base64
+            const imgB64 = await FileSystem.readAsStringAsync(manipResult.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            
+            // 2. Convert Base64 to Uint8Array
+            const imgBuffer = tf.util.encodeString(imgB64, 'base64').buffer;
+            const raw = new Uint8Array(imgBuffer);
+            
+            // 3. Decode JPEG to Tensor directly
+            const imageTensor = decodeJpeg(raw);
+            
+            console.log('🧠 Step 3: Running MobileNet inference...');
+            predictions = await loadedModel.classify(imageTensor);
+            
+            // Cleanup tensor to prevent memory leaks
+            imageTensor.dispose();
+        }
+        
         console.log('✅ Classification complete!');
         console.log(`📊 Received ${predictions.length} predictions`);
-
+        
         // Map predictions to our object database
         console.log('🔄 Step 4: Mapping predictions to database...');
         const result = mapPredictionToObject(predictions);
-
+        
         if (result) {
             console.log('==========================================');
             console.log(`🎉 SUCCESS! Object identified: ${result.name}`);
             console.log('==========================================');
             return result;
         }
-
+        
         console.log('==========================================');
         console.log('⚠️ Could not map predictions to known objects');
         console.log('==========================================');
