@@ -1,10 +1,18 @@
-import * as mobilenet from '@tensorflow-models/mobilenet';
 import { ObjectData } from '../types';
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { decodeJpeg } from '@tensorflow/tfjs-react-native';
-import * as tf from '@tensorflow/tfjs';
+
+// =========================================================================
+// 🌐 CONFIGURATION
+// =========================================================================
+
+// ⚠️ CRITICAL: Replace this with your computer's local IP address.
+// On Windows, run 'ipconfig' to find it.
+// Example: 'http://192.168.1.15:8000/predict'
+const API_URL = 'http://10.219.134.67:8000/predict';
+
+// =========================================================================
+// 📚 DATABASE & MAPPING
+// =========================================================================
 
 const MOCK_DB: Record<string, ObjectData> = {
     lightbulb: {
@@ -85,44 +93,9 @@ const MOCK_DB: Record<string, ObjectData> = {
     },
 };
 
-// TensorFlow model state
-let model: mobilenet.MobileNet | null = null;
-let isModelLoading = false;
-
-// Initialize TensorFlow and load MobileNet model
-const loadModel = async () => {
-    if (model) return model;
-    if (isModelLoading) {
-        // Wait for ongoing load
-        while (isModelLoading) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        return model;
-    }
-
-    try {
-        isModelLoading = true;
-        console.log('🔄 Loading MobileNet model...');
-
-        // Load the MobileNet model
-        model = await mobilenet.load({
-            version: 2,
-            alpha: 1.0,
-        });
-
-        console.log('✅ MobileNet model loaded successfully!');
-        return model;
-    } catch (error) {
-        console.error('❌ Failed to load model:', error);
-        throw error;
-    } finally {
-        isModelLoading = false;
-    }
-};
-
-// Map MobileNet predictions to our internal data structure
+// Map Backend predictions to our internal data structure
 const mapPredictionToObject = (predictions: Array<{ className: string; probability: number }>): ObjectData | null => {
-    console.log('📊 MobileNet Predictions:', JSON.stringify(predictions.slice(0, 5), null, 2));
+    console.log('📊 Analysis Results:', JSON.stringify(predictions.slice(0, 5), null, 2));
 
     if (!predictions || predictions.length === 0) {
         return null;
@@ -153,7 +126,7 @@ const mapPredictionToObject = (predictions: Array<{ className: string; probabili
         .map(w => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ');
 
-    console.log(`✨ Generating dynamic X-Ray for: ${displayName}`);
+    console.log(`✨ Generating Dynamic Blueprints for: ${displayName}`);
 
     return {
         id: `dynamic_${Date.now()}`,
@@ -183,28 +156,25 @@ const mapPredictionToObject = (predictions: Array<{ className: string; probabili
     };
 };
 
-// REPLACE THIS WITH YOUR COMPUTER'S LOCAL IP ADDRESS (e.g., 192.168.1.X)
-// 'localhost' will NOT work on your phone!
-const API_URL = 'http://10.219.134.67:8000/predict'; // <--- UPDATED WITH YOUR DETECTED IP
+// =========================================================================
+// 🚀 MAIN SERVICE
+// =========================================================================
 
 export const identifyObject = async (imageUri: string): Promise<ObjectData | null> => {
     console.log('==========================================');
-    console.log('🚀 Starting object identification via Python Backend');
+    console.log('🚀 Starting Cloud Identification');
     console.log('📷 Image URI:', imageUri.length > 50 ? imageUri.substring(0, 50) + '...' : imageUri);
     console.log('🌐 Target API:', API_URL);
     console.log('==========================================');
 
     try {
-        // 1. Prepare Form Data
-        console.log('📤 Step 1: Preparing upload...');
+        // 1. Prepare Form Data for Backend
+        console.log('📤 Preparing upload...');
         const formData = new FormData();
         
-        // We need to fetch the file info to get the type correctly on native, 
-        // but often we can just infer it or let the backend handle it.
-        // For Expo, we can construct the file object directly:
         const filename = imageUri.split('/').pop() || 'photo.jpg';
-        const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : `image/jpeg`;
+        // Simple type inference
+        const type = filename.endsWith('.png') ? 'image/png' : 'image/jpeg';
 
         formData.append('file', {
             uri: imageUri,
@@ -212,53 +182,55 @@ export const identifyObject = async (imageUri: string): Promise<ObjectData | nul
             type: type,
         } as any);
 
-        // 2. Send Request
-        console.log('📡 Step 2: Sending request to Python server...');
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'content-type': 'multipart/form-data',
-            },
-        });
+        // 2. Send Request to Python Server
+        console.log('📡 Sending request...');
+        
+        // Timeout handling (5 seconds)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Server responded with ${response.status}: ${errorText}`);
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'content-type': 'multipart/form-data',
+                },
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Server Error (${response.status}): ${errorText}`);
+            }
+
+            // 3. Parse Response
+            const data = await response.json();
+            const predictions = data.predictions;
+
+            console.log('✅ Analysis complete!');
+            
+            // 4. Map
+            return mapPredictionToObject(predictions);
+
+        } catch (fetchError) {
+             if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+                throw new Error('Request timed out. Check if server is reachable.');
+            }
+            throw fetchError;
         }
-
-        // 3. Parse Response
-        const data = await response.json();
-        const predictions = data.predictions;
-
-        console.log('✅ Classification complete!');
-        console.log(`📊 Received ${predictions.length} predictions`);
-        
-        // 4. Map predictions to our object database
-        console.log('🔄 Step 3: Mapping predictions to database...');
-        const result = mapPredictionToObject(predictions);
-        
-        if (result) {
-            console.log('==========================================');
-            console.log(`🎉 SUCCESS! Object identified: ${result.name}`);
-            console.log('==========================================');
-            return result;
-        }
-        
-        console.log('==========================================');
-        console.log('⚠️ Could not map predictions to known objects');
-        console.log('==========================================');
-        return null;
 
     } catch (error) {
         console.log('==========================================');
-        console.error('❌ ERROR connecting to Python Backend:');
+        console.error('❌ IDENTIFICATION FAILED');
         console.error('Message:', error instanceof Error ? error.message : String(error));
-        console.error('------- TIPS -------');
-        console.error('1. Make sure the Python server is running');
-        console.error('2. Make sure your computer and phone are on the same WiFi');
-        console.error('3. UPDATE THE "API_URL" at the top of ObjectRecognitionService.ts with your computer IP');
+        console.log('------------------------------------------');
+        console.log('Troubleshooting Tips:');
+        console.log('1. Is the Python server running? (python main.py)');
+        console.log(`2. Is your IP correct? (${API_URL})`);
+        console.log('3. Are phone & computer on the same WiFi?');
         console.log('==========================================');
-        return null;
+        return null; // Return null so UI shows "Can't identify" instead of crashing
     }
 };
