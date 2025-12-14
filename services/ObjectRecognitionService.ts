@@ -185,7 +185,7 @@ const mapPredictionToObject = (predictions: Array<{ className: string; probabili
 
 // REPLACE THIS WITH YOUR COMPUTER'S LOCAL IP ADDRESS (e.g., 192.168.1.X)
 // 'localhost' will NOT work on your phone!
-const API_URL = 'http://192.168.1.100:8000/predict'; // <--- CHANGE THIS
+const API_URL = 'http://10.219.134.67:8000/predict'; // <--- UPDATED WITH YOUR DETECTED IP
 
 export const identifyObject = async (imageUri: string): Promise<ObjectData | null> => {
     console.log('==========================================');

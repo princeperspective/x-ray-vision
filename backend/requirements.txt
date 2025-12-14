@@ -1,6 +1,8 @@
 fastapi
 uvicorn
 python-multipart
-tensorflow
+# tensorflow <- Removed due to Python 3.14 incompatibility
+torch
+torchvision
 pillow
 numpy
