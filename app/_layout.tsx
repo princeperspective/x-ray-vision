@@ -3,8 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
-import * as tf from '@tensorflow/tfjs';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Alert, View } from 'react-native';
+import { checkBackendConnection } from '../services/ObjectRecognitionService';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -19,28 +19,21 @@ export default function RootLayout() {
   const [tfReady, setTfReady] = useState(false);
 
   useEffect(() => {
-    const initTensorFlow = async () => {
-      try {
-        console.log('Initializing TensorFlow...');
-        await tf.ready();
-        console.log('TensorFlow initialized successfully');
-        setTfReady(true);
-      } catch (error) {
-        console.error('Failed to initialize TensorFlow:', error);
-        // Still set ready to avoid blocking the app
-        setTfReady(true);
+    // Check connection to Python Backend on startup
+    const checkConnection = async () => {
+      const isOnline = await checkBackendConnection();
+      if (!isOnline) {
+        Alert.alert(
+          'Backend Unavailable',
+          'Could not connect to the Python server. \n\n1. Ensure "python main.py" is running.\n2. Verify the IP address in ObjectRecognitionService.ts matches your computer.\n3. Ensure Phone and Computer are on the same WiFi.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        console.log('✅ Connected to Python Backend!');
       }
     };
-    initTensorFlow();
+    checkConnection();
   }, []);
-
-  if (!tfReady) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
-        <ActivityIndicator size="large" color="#00ff00" />
-      </View>
-    );
-  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

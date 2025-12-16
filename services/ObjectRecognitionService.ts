@@ -8,7 +8,7 @@ import { Platform } from 'react-native';
 // ⚠️ CRITICAL: Replace this with your computer's local IP address.
 // On Windows, run 'ipconfig' to find it.
 // Example: 'http://192.168.1.15:8000/predict'
-const API_URL = 'http://10.219.134.67:8000/predict';
+const API_URL = 'http://172.19.240.67:8000/predict';
 
 // =========================================================================
 // 📚 DATABASE & MAPPING
@@ -160,6 +160,23 @@ const mapPredictionToObject = (predictions: Array<{ className: string; probabili
 // 🚀 MAIN SERVICE
 // =========================================================================
 
+/**
+ * Pings the Python backend to check if it's reachable.
+ * Call this on app startup.
+ */
+export const checkBackendConnection = async (): Promise<boolean> => {
+    try {
+        console.log(`Checking connection to: ${API_URL.replace('/predict', '')}`);
+        const response = await fetch(API_URL.replace('/predict', ''), {
+            method: 'GET',
+        });
+        return response.ok;
+    } catch (error) {
+        console.error('Ping failed:', error);
+        return false;
+    }
+};
+
 export const identifyObject = async (imageUri: string): Promise<ObjectData | null> => {
     console.log('==========================================');
     console.log('🚀 Starting Cloud Identification');
@@ -173,14 +190,21 @@ export const identifyObject = async (imageUri: string): Promise<ObjectData | nul
         const formData = new FormData();
         
         const filename = imageUri.split('/').pop() || 'photo.jpg';
-        // Simple type inference
         const type = filename.endsWith('.png') ? 'image/png' : 'image/jpeg';
 
-        formData.append('file', {
-            uri: imageUri,
-            name: filename,
-            type: type,
-        } as any);
+        if (Platform.OS === 'web' || imageUri.startsWith('data:') || imageUri.startsWith('blob:')) {
+            // For Web or Data URIs, we must convert to a Blob
+            const response = await fetch(imageUri);
+            const blob = await response.blob();
+            formData.append('file', blob, filename);
+        } else {
+            // For Native (iOS/Android), use the special object format
+            formData.append('file', {
+                uri: imageUri,
+                name: filename,
+                type: type,
+            } as any);
+        }
 
         // 2. Send Request to Python Server
         console.log('📡 Sending request...');
@@ -193,9 +217,6 @@ export const identifyObject = async (imageUri: string): Promise<ObjectData | nul
             const response = await fetch(API_URL, {
                 method: 'POST',
                 body: formData,
-                headers: {
-                    'content-type': 'multipart/form-data',
-                },
                 signal: controller.signal,
             });
             clearTimeout(timeoutId);
