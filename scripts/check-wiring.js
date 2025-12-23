@@ -6,8 +6,8 @@ const http = require('http');
 const servicePath = path.join(__dirname, '../services/ObjectRecognitionService.ts');
 const serviceContent = fs.readFileSync(servicePath, 'utf8');
 
-// Regex to find: const API_URL = 'http://(IP):(PORT)/predict';
-const match = serviceContent.match(/const API_URL = '(http:\/\/[^:]+):(\d+)\/predict';/);
+// Regex to find: [const|let] API_URL = 'http://(IP):(PORT)/predict';
+const match = serviceContent.match(/(?:const|let)\s+API_URL\s*=\s*['"](http:\/\/[^:]+):(\d+)\/predict['"];/);
 
 if (!match) {
     console.error("❌ Could not find API_URL in ObjectRecognitionService.ts");
