@@ -40,7 +40,8 @@ proj1/
 ├── app/                    # Expo Router screens (Navigation)
 │   ├── index.tsx           # Home/Landing screen
 │   ├── scan.tsx            # Camera capture interface
-│   └── result.tsx          # Recognition results & visualization
+│   ├── result.tsx          # Recognition results & visualization
+│   └── settings.tsx        # Dynamic IP Configuration
 ├── backend/                # PYTHON SERVER
 │   ├── main.py             # FastAPI entry point & Inference logic
 │   └── requirements.txt    # Python dependencies
@@ -101,10 +102,11 @@ npx expo start
 Since the app runs on your phone and the server runs on your computer, they must be able to talk to each other.
 
 1.  **Same Wi-Fi**: Ensure your Phone and Computer are connected to the exact same Wi-Fi network.
-2.  **IP Address**: The app needs to know your computer's local IP.
-    - The backend usually prints the detected IP, or strictly listens on `0.0.0.0`.
-    - Check `services/ObjectRecognitionService.ts`. The `API_URL` should look like `http://<YOUR_LOCAL_IP>:8000/predict`.
-    - If needed, run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to find your IPv4 address (e.g., `192.168.1.5`) and update the file manually.
+2.  **IP Address Configuration**:
+    - **Easy Way**: Open the app, click the Gear icon (Settings), and type in your computer's IP (e.g., `http://192.168.1.5:8000`). The app will save this and remember it.
+    - **Hard Way**: Edit `API_URL` in `services/ObjectRecognitionService.ts`.
+    - Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) to find your IPv4 address.
+3.  **Model Caching**: The first time you run the backend, it will download the MobileNet model (approx 14MB). This is now cached in `backend/model_cache/` so it won't redownload on future runs.
 
 ## 🔧 Troubleshooting
 

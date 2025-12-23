@@ -1,12 +1,29 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import torch
-from torchvision import models, transforms
-from PIL import Image
-import io
-import uvicorn
+import logging
+import os
 import json
 import urllib.request
+import io
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+from PIL import Image
+
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Set PyTorch Cache Directory to be within the project for portability/persistence
+os.environ['TORCH_HOME'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model_cache')
+os.makedirs(os.environ['TORCH_HOME'], exist_ok=True)
+
+import torch
+from torchvision import models, transforms
 
 app = FastAPI()
 
@@ -18,18 +35,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("🔄 Loading PyTorch MobileNetV2 Model...")
-# Use default weights (IMAGENET1K_V1)
+logger.info("🔄 Loading PyTorch MobileNetV2 Model...")
+# This will download to TORCH_HOME if not present
 weights = models.MobileNet_V2_Weights.IMAGENET1K_V1
 model = models.mobilenet_v2(weights=weights)
-model.eval() # Set to evaluation mode
-print("✅ Model Loaded Successfully!")
+model.eval()
+logger.info("✅ Model Loaded Successfully!")
 
-# Load ImageNet Class labels
-print("🔄 Loading ImageNet Class labels...")
-class_idx = json.load(urllib.request.urlopen("https://s3.amazonaws.com/deep-learning-models/image-models/imagenet_class_index.json"))
+# Load ImageNet Class labels (Cache locally)
+LABELS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_class_index.json')
+if not os.path.exists(LABELS_FILE):
+    logger.info("⬇️ Downloading ImageNet labels...")
+    urllib.request.urlretrieve("https://s3.amazonaws.com/deep-learning-models/image-models/imagenet_class_index.json", LABELS_FILE)
+
+logger.info("🔄 Loading ImageNet Class labels from disk...")
+with open(LABELS_FILE, 'r') as f:
+    class_idx = json.load(f)
 labels = {int(key): value[1] for key, value in class_idx.items()}
-print("✅ Labels Loaded!")
+logger.info("✅ Labels Loaded!")
 
 # Image preprocessing transform
 preprocess = transforms.Compose([
@@ -46,7 +69,7 @@ def process_image(img_data):
         input_batch = input_tensor.unsqueeze(0) # Create a mini-batch as expected by the model
         return input_batch
     except Exception as e:
-        print(f"Error processing image: {e}")
+        logger.error(f"Error processing image: {e}")
         return None
 
 @app.get("/")
@@ -55,7 +78,7 @@ def read_root():
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    print(f"📥 Received file: {file.filename}")
+    logger.info(f"📥 Received file: {file.filename}")
     
     try:
         content = await file.read()
@@ -65,7 +88,7 @@ async def predict(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Invalid image format")
 
         # Run inference
-        print("🧠 Running inference...")
+        logger.info("🧠 Running inference...")
         with torch.no_grad():
             output = model(input_batch)
         
@@ -81,19 +104,22 @@ async def predict(file: UploadFile = File(...)):
             class_id = top5_catid[i].item()
             label = labels[class_id]
             
-            print(f"   {i+1}. {label}: {score:.4f}")
+            # Log top prediction mostly to reduce noise
+            if i == 0:
+                 logger.info(f"🔝 Top Prediction: {label} ({score:.4f})")
+            
             results.append({
                 "className": label.replace("_", " "),
                 "probability": float(score)
             })
             
-        print("✅ Prediction complete")
+        logger.info("✅ Prediction complete")
         return {"predictions": results}
 
     except HTTPException as he:
         raise he
     except Exception as e:
-        print(f"❌ Error during prediction: {e}")
+        logger.error(f"❌ Error during prediction: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
