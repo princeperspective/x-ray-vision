@@ -6,3 +6,5 @@ torch
 torchvision
 pillow
 numpy
+pytest
+httpx

@@ -90,6 +90,8 @@ async def predict(file: UploadFile = File(...)):
         print("✅ Prediction complete")
         return {"predictions": results}
 
+    except HTTPException as he:
+        raise he
     except Exception as e:
         print(f"❌ Error during prediction: {e}")
         raise HTTPException(status_code=500, detail=str(e))
