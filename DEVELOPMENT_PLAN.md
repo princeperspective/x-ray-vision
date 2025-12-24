@@ -1,54 +1,52 @@
 # Object Recognition Project - Development Plan
 
-## 🚨 Current Status & "Missing Links"
+## � Current Status
 
-The project has transitioned from a client-side only AI (TensorFlow.js) to a robust client-server architecture (React Native + Python Backend). However, "ghost" code from the previous implementation is causing instability.
+The project has successfully transitioned to a stable **Client-Server Architecture**.
 
-### Identificed Issues
-
-1.  **Bloated Dependencies**: The React Native app still loads TensorFlow.js libraries, which are heavy and unnecessary now that we use Python.
-2.  **Fragile Networking**: The IP address (`http://10.219.134.67:8000`) is hardcoded. If your computer's IP changes (which happens on reboot/WiFi reconnect), the app breaks silently.
-3.  **Mixed Logic**: The `ObjectRecognitionService` currently tries to initialize TensorFlow _before_ calling the Python backend. If TensorFlow initialization fails, the network call never happens.
-
----
-
-## 🛠️ Refactoring Plan
-
-### Phase 1: Clean Up Frontend (Priority High)
-
-**Goal**: Make the React Native app a lightweight "Thin Client" that simply takes a photo and uploads it.
-
-1.  **Remove TFJS**: Uninstall `@tensorflow/tfjs`, `@tensorflow-models/mobilenet`, and `@tensorflow/tfjs-react-native`.
-2.  **Rewrite Service**: Completely strip `ObjectRecognitionService.ts` to only contain:
-    - The `API_URL` constant.
-    - The `identifyObject` function (HTTP POST).
-    - The `mapPredictionToObject` logic (Universal Mapper).
-
-### Phase 2: Robust Networking
-
-**Goal**: Ensure the phone can always talk to the computer.
-
-1.  **Dynamic Configuration**: We cannot easily auto-detect the IP on the phone, but we can make it easier to change.
-2.  **Connection Test**: Add a simple "Ping" check on app startup to verify the server is reachable before the user tries to scan.
-
-### Phase 3: Backend Enhancements
-
-**Goal**: Ensure the Python server is bulletproof.
-
-1.  **Logging**: The current print statements are good, but we should ensure the server doesn't crash on bad image data (already handled by try/except).
-2.  **Model Cache**: The model is currently downloaded on every startup if not cached. We should ensure it persists.
+- **Frontend**: Lightweight React Native "Thin Client" (Expo). Dependencies cleaned, TFJS removed.
+- **Backend**: Python FastAPI with PyTorch (MobileNetV2).
+- **Networking**: Dynamic IP configuration via in-app Settings with connection diagnostics.
+- **Testing**: Terminal-style connectivity tests implemented in UI; Basic unit tests for backend/frontend services established.
 
 ---
 
-## 📋 Action Items for User
+## � Roadmap & Pending Tasks
 
-1.  **Verify IP Address**: Before every session, run `ipconfig` (Windows) and update the `API_URL` in `services/ObjectRecognitionService.ts`.
-2.  **Start Backend First**: Always run `python main.py` in the `backend/` folder before opening the app.
-3.  **Use "Scan QR"**: Always use the Expo Go app to scan the QR code after starting `npx expo start`.
+### 1. Advanced Networking (Service Discovery)
+
+**Goal**: Remove the need for manual IP entry.
+
+- Implement UDP Broadcast / Multicast DNS (mDNS) on the Python backend.
+- Create a listener on the React Native side to auto-detect the server on the local network.
+
+### 2. AI Model Specialization
+
+**Goal**: Move beyond generic ImageNet labels to specific "X-Ray" contents.
+
+- **Data Collection**: Gather dataset of internal component views (PCBs, Batteries, Motors).
+- **Training**: Fine-tune the PyTorch model for specific electronic/mechanical internal components.
+- **Output**: Return bounding boxes + labels for specific internal parts rather than just one global label.
+
+### 3. UI/UX "Wows" (Visual Polish)
+
+**Goal**: Elevate the app from "Functional" to "Premium".
+
+- **Scanning Animations**: Add a scanner "beam" effect over the camera view.
+- **Result Presentation**: Instead of a simple list, overlay "Holographic" labels on the captured image.
+- **Haptic Feedback**: Add vibration feedback during scan and success states.
+
+### 4. Production & Deployment
+
+**Goal**: Make the system accessible outside the local network.
+
+- **Dockerization**: Containerize the backend for easy deployment.
+- **Cloud Hosting**: Deploy the Python backend to a GPU-enabled cloud provider (e.g., AWS, GCP, Render).
+- **Offline Fallback**: Investigate using a smaller, quantized ONNX model on-device for basic functionality when offline.
 
 ---
 
-## 🚀 Future Roadmap
+## 🧪 Testing Strategy
 
-- **Service Discovery**: Implement a UDP broadcast mechanism so the phone finds the computer automatically.
-- **Custom Model**: Train a custom PyTorch model on "Electronic Components" instead of generic ImageNet classes for better X-Ray accuracy.
+- **E2E Testing**: Implement Maestro or Detox for full end-to-end user flows.
+- **Performance Profiling**: Measure latency from "Capture" to "Render" and optimize image compression/resolution.

@@ -8,7 +8,7 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ⚠️ CRITICAL: Default Fallback. On Windows, run 'ipconfig' to find it.
-let API_URL = "http://172.19.240.67:8000/predict";
+let API_URL = "http://10.33.139.67:8081";
 const STORAGE_KEY = "custom_api_url";
 
 export const getApiUrl = () => API_URL;
