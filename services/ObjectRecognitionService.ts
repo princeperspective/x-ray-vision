@@ -26,12 +26,18 @@ class ObjectRecognitionService {
     const filename = imageUri.split("/").pop() || "photo.jpg";
     const type = "image/jpeg";
 
-    // @ts-ignore: React Native FormData
-    formData.append("file", {
-      uri: Platform.OS === "ios" ? imageUri.replace("file://", "") : imageUri,
-      name: filename,
-      type: type,
-    });
+    if (Platform.OS === "web") {
+      const resp = await fetch(imageUri);
+      const blob = await resp.blob();
+      formData.append("file", blob, filename);
+    } else {
+      // @ts-ignore: React Native FormData
+      formData.append("file", {
+        uri: Platform.OS === "ios" ? imageUri.replace("file://", "") : imageUri,
+        name: filename,
+        type: type,
+      });
+    }
 
     console.log(`Uploading to ${this.apiUrl}/predict...`);
 
