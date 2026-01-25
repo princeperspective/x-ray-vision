@@ -1,7 +1,8 @@
 import { Platform } from "react-native";
 
 // Default IP - User will likely need to change this
-export const DEFAULT_API_URL = "http://192.168.1.5:8000";
+export const DEFAULT_API_URL =
+  Platform.OS === "web" ? "http://localhost:8000" : "http://192.168.1.5:8000";
 
 class ObjectRecognitionService {
   private apiUrl: string = DEFAULT_API_URL;
@@ -39,18 +40,19 @@ class ObjectRecognitionService {
       });
     }
 
-    console.log(`Uploading to ${this.apiUrl}/predict...`);
+    const targetUrl = `${this.apiUrl}/predict`;
+    console.log(`Uploading to ${targetUrl}...`);
 
     try {
       // Race the fetch against a timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
-      const response = await fetch(`${this.apiUrl}/predict`, {
+      const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
           Accept: "application/json",
-          "Content-Type": "multipart/form-data",
+          // Content-Type must be undefined for FormData to work correctly with boundary
         },
         body: formData,
         signal: controller.signal,
